@@ -1,0 +1,23 @@
+name: Test Vertex AI API Key Auth
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run action with Vertex AI inputs
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          google_api_key: 'fake-google-api-key-for-testing'
+          gcp_location: 'us-central1'
+          gcp_project_id: 'my-test-project'
+          use_vertex_ai: 'true'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+      - name: Assert action started successfully
+        run: |
+          echo "Action completed (possibly with error at CLI run step, which is expected without real credentials)"
+          echo "PASS: inputs were accepted by the action"

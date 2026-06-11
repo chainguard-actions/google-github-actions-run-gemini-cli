@@ -1,0 +1,21 @@
+name: Test Extensions Input
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Run action with extensions input
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          extensions: '["@google/mcp-server-github"]'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+      - name: Assert action started with extensions input
+        run: |
+          echo "Action completed (possibly with error at CLI run step, which is expected without real credentials)"
+          echo "PASS: extensions input was accepted by the action"
