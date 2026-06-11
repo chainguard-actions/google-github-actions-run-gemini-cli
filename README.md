@@ -8,6 +8,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 | Version | Tag | Upstream commit |
 |---------|-----|-----------------|
+| v0.1.20 | [`v0.1.20`](https://github.com/chainguard-actions/google-github-actions-run-gemini-cli/tree/v0.1.20) | [`b7c22b0`](https://github.com/google-github-actions/run-gemini-cli/commit/b7c22b00bd5a02e52eec973dc4b3bd391eb31512) |
 | v0.1.22 | [`v0.1.22`](https://github.com/chainguard-actions/google-github-actions-run-gemini-cli/tree/v0.1.22) | [`f77273f`](https://github.com/google-github-actions/run-gemini-cli/commit/f77273f4c914e4bf38440cf36a0369cb64a37489) |
 
 ## Privacy
