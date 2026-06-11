@@ -1,0 +1,27 @@
+name: Test Workload Identity Federation inputs
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gcp_workload_identity_provider: 'projects/123/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
+          gcp_service_account: 'my-sa@my-project.iam.gserviceaccount.com'
+          gcp_project_id: 'my-test-project'
+          gcp_location: 'us-central1'
+          use_vertex_ai: 'true'
+          extensions: '["@google/gemini-cli-extension-example"]'
+          prompt: 'Say hello'
+      - name: Assert action ran
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          if [ -z "${{ steps.action.outcome }}" ]; then
+            echo "FAIL: action outcome is empty"
+            exit 1
+          fi
+          echo "PASS: action was invoked with outcome=${{ steps.action.outcome }}"

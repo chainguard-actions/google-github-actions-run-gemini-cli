@@ -1,0 +1,234 @@
+import { execSync, spawn } from 'node:child_process';
+import {
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+  realpathSync,
+  copyFileSync,
+} from 'node:fs';
+import { join, dirname, basename } from 'node:path';
+import * as os from 'node:os';
+import { env } from 'node:process';
+
+export class TestRig {
+  testDir: string;
+  homeDir: string;
+  telemetryLog: string;
+  lastRunStdout: string = '';
+  lastRunStderr: string = '';
+  mcpServers: Record<string, any> = {};
+
+  constructor(testName: string) {
+    const sanitizedName = testName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    this.testDir = join(os.tmpdir(), 'gemini-evals', sanitizedName);
+    this.homeDir = join(os.tmpdir(), 'gemini-evals', sanitizedName + '-home');
+
+    mkdirSync(this.testDir, { recursive: true });
+    mkdirSync(this.homeDir, { recursive: true });
+
+    this.telemetryLog = join(this.homeDir, 'telemetry.log');
+    this._setupSettings();
+    this._setupMockGh();
+  }
+
+  private _setupMockGh() {
+    const binDir = join(this.testDir, 'bin');
+    mkdirSync(binDir, { recursive: true });
+    const ghPath = join(binDir, 'gh');
+    writeFileSync(ghPath, '#!/bin/bash\necho "Mock gh command: $@"\nexit 0\n');
+    execSync(`chmod +x ${ghPath}`);
+  }
+
+  private _setupSettings() {
+    const authType =
+      env['GOOGLE_API_KEY'] && !env['GEMINI_API_KEY']
+        ? 'vertex-ai'
+        : 'gemini-api-key';
+    const settings = {
+      general: { disableAutoUpdate: true, previewFeatures: false },
+      telemetry: { enabled: true, target: 'local', outfile: this.telemetryLog },
+      security: {
+        auth: { selectedType: authType },
+        folderTrust: { enabled: false },
+      },
+      model: { name: env['GEMINI_MODEL'] || 'gemini-3-flash-preview' },
+      mcpServers: this.mcpServers,
+      tools: {
+        core: [
+          'run_shell_command',
+          'read_file',
+          'list_directory',
+          'glob',
+          'grep',
+          'edit',
+          'write_file',
+          'replace',
+        ],
+      },
+    };
+
+    const projectGeminiDir = join(this.testDir, '.gemini');
+    const userGeminiDir = join(this.homeDir, '.gemini');
+    mkdirSync(projectGeminiDir, { recursive: true });
+    mkdirSync(userGeminiDir, { recursive: true });
+
+    // Proactively create chats directory to avoid ENOENT errors
+    const sanitizedName = basename(this.testDir);
+    const chatsDir = join(userGeminiDir, 'tmp', sanitizedName, 'chats');
+    mkdirSync(chatsDir, { recursive: true });
+
+    writeFileSync(
+      join(projectGeminiDir, 'settings.json'),
+      JSON.stringify(settings, null, 2),
+    );
+    writeFileSync(
+      join(userGeminiDir, 'settings.json'),
+      JSON.stringify(settings, null, 2),
+    );
+  }
+
+  setupMockMcp() {
+    const mockServerPath = realpathSync(join(__dirname, 'mock-mcp-server.mjs'));
+    this.mcpServers['github'] = {
+      command: 'node',
+      args: [mockServerPath],
+      trust: true,
+    };
+    this._setupSettings(); // Re-write with MCP config
+  }
+
+  createFile(path: string, content: string) {
+    const fullPath = join(this.testDir, path);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, content);
+  }
+
+  readFile(path: string): string {
+    return readFileSync(join(this.testDir, path), 'utf-8');
+  }
+
+  private _getCleanEnv(
+    extraEnv?: Record<string, string>,
+  ): Record<string, string | undefined> {
+    const cleanEnv: Record<string, string | undefined> = { ...process.env };
+
+    for (const key of Object.keys(cleanEnv)) {
+      if (
+        (key.startsWith('GEMINI_') || key.startsWith('GOOGLE_GEMINI_')) &&
+        key !== 'GEMINI_API_KEY' &&
+        key !== 'GOOGLE_API_KEY' &&
+        key !== 'GEMINI_MODEL' &&
+        key !== 'GEMINI_DEBUG' &&
+        key !== 'GEMINI_CLI_TEST_VAR' &&
+        !key.startsWith('GEMINI_CLI_ACTIVITY_LOG')
+      ) {
+        delete cleanEnv[key];
+      }
+    }
+
+    return {
+      ...cleanEnv,
+      GEMINI_CLI_HOME: this.homeDir,
+      PATH: `${join(this.testDir, 'bin')}:${cleanEnv.PATH || ''}`,
+      ...extraEnv,
+    };
+  }
+
+  async run(
+    args: string[],
+    extraEnv?: Record<string, string>,
+    allowedTools?: string[],
+  ): Promise<string> {
+    const runArgs = [...args];
+    const isSubcommand = args.length > 0 && !args[0].startsWith('-');
+
+    if (!isSubcommand) {
+      if (Object.keys(this.mcpServers).length > 0) {
+        runArgs.push(
+          '--allowed-mcp-server-names',
+          Object.keys(this.mcpServers).join(','),
+        );
+      }
+      const tools = ['run_shell_command', ...(allowedTools || [])];
+      runArgs.push('--allowed-tools', tools.join(','));
+    }
+
+    return new Promise((resolve, reject) => {
+      const child = spawn('gemini', runArgs, {
+        cwd: this.testDir,
+        env: this._getCleanEnv(extraEnv),
+        stdio: 'pipe',
+      });
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (data) => (stdout += data));
+      child.stderr.on('data', (data) => (stderr += data));
+
+      const timeoutId = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(
+          new Error(
+            `Timeout: Command exceeded 600 seconds. stdout:\n${stdout.slice(-500)}\nstderr: \n${stderr.slice(-500)}\n`,
+          ),
+        );
+      }, 600_000);
+
+      child.on('error', (err) => {
+        clearTimeout(timeoutId);
+        reject(err);
+      });
+
+      child.on('close', (code) => {
+        clearTimeout(timeoutId);
+        this.lastRunStdout = stdout;
+        this.lastRunStderr = stderr;
+        if (code === 0) resolve(stdout);
+        else reject(new Error(`Exit ${code}: ${stderr}`));
+      });
+    });
+  }
+
+  git(args: string[]) {
+    return execSync(`git ${args.join(' ')}`, {
+      cwd: this.testDir,
+      encoding: 'utf-8',
+    });
+  }
+
+  initGit() {
+    this.git(['init']);
+    this.git(['config', 'user.email', 'test@example.com']);
+    this.git(['config', 'user.name', 'Test User']);
+  }
+
+  readToolLogs() {
+    if (!existsSync(this.telemetryLog)) return [];
+    const content = readFileSync(this.telemetryLog, 'utf-8');
+    return content
+      .split(/(?<=})\s*(?={)/)
+      .map((obj) => {
+        try {
+          return JSON.parse(obj.trim());
+        } catch {
+          return null;
+        }
+      })
+      .filter((o) => o?.attributes?.['event.name'] === 'gemini_cli.tool_call')
+      .map((o) => ({
+        name: o.attributes.function_name,
+        args: o.attributes.function_args,
+        success: o.attributes.success,
+        duration_ms: o.attributes.duration_ms,
+      }));
+  }
+
+  cleanup() {
+    if (env['KEEP_OUTPUT'] !== 'true') {
+      rmSync(this.testDir, { recursive: true, force: true });
+      rmSync(this.homeDir, { recursive: true, force: true });
+    }
+  }
+}
