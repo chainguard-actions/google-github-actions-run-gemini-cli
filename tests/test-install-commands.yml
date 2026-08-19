@@ -1,0 +1,45 @@
+name: Test install custom commands
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action (will fail at CLI run step due to no real key)
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+
+      - name: Assert commands were installed
+        run: |
+          echo "Checking .gemini/commands directory..."
+          if [ ! -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands directory was not created"
+            exit 1
+          fi
+
+          # Check that at least one .toml file was copied
+          TOML_COUNT=$(find .gemini/commands -name "*.toml" | wc -l)
+          echo "Found ${TOML_COUNT} .toml command files"
+          if [ "$TOML_COUNT" -eq 0 ]; then
+            echo "FAIL: no .toml command files found in .gemini/commands"
+            exit 1
+          fi
+          echo "PASS: ${TOML_COUNT} command files installed"
+
+      - name: Assert specific command files exist
+        run: |
+          for cmd in gemini-invoke.toml gemini-review.toml gemini-triage.toml; do
+            if [ ! -f ".gemini/commands/${cmd}" ]; then
+              echo "FAIL: expected command file '.gemini/commands/${cmd}' not found"
+              exit 1
+            fi
+            echo "PASS: found .gemini/commands/${cmd}"
+          done

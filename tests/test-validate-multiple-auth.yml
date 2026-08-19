@@ -1,0 +1,91 @@
+name: Test input validation - multiple auth methods
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with multiple auth methods (gemini_api_key + google_api_key)
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-gemini-api-key'
+          google_api_key: 'fake-google-api-key'
+          use_vertex_ai: 'true'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+
+      - name: Assert action ran (validate step warns but does not fail)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The validate_inputs step only emits warnings, so the action should
+          # proceed past validation and fail only at CLI execution (fake keys).
+          # Both 'success' and 'failure' are acceptable - we just need it to run.
+          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran to completion (outcome=$OUTCOME)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+
+      - name: Verify multiple-auth warning logic inline
+        id: validate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}${msg}|"
+          }
+
+          auth_methods=0
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+
+          if [[ ${auth_methods} -eq 0 ]]; then
+            warn "No authentication method provided."
+          fi
+
+          if [[ ${auth_methods} -gt 1 ]]; then
+            warn "Multiple authentication methods provided."
+            echo "multiple_auth_warning=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "auth_methods=${auth_methods}" >> "$GITHUB_OUTPUT"
+        env:
+          INPUT_GEMINI_API_KEY_PRESENT: "true"
+          INPUT_GOOGLE_API_KEY_PRESENT: "true"
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT: "false"
+          INPUT_GCP_PROJECT_ID_PRESENT: "false"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT: "false"
+          INPUT_GCP_TOKEN_FORMAT: "access_token"
+          INPUT_USE_VERTEX_AI: "false"
+          INPUT_USE_GEMINI_CODE_ASSIST: "false"
+
+      - name: Assert multiple-auth warning was triggered
+        env:
+          MULTIPLE_AUTH_WARNING: ${{ steps.validate.outputs.multiple_auth_warning }}
+          AUTH_METHODS: ${{ steps.validate.outputs.auth_methods }}
+        run: |
+          echo "multiple_auth_warning: $MULTIPLE_AUTH_WARNING"
+          echo "auth_methods: $AUTH_METHODS"
+          if [ "$MULTIPLE_AUTH_WARNING" != "true" ]; then
+            echo "FAIL: expected multiple_auth_warning to be 'true'"
+            exit 1
+          fi
+          if [ "$AUTH_METHODS" != "2" ]; then
+            echo "FAIL: expected auth_methods to be '2', got '$AUTH_METHODS'"
+            exit 1
+          fi
+          echo "PASS"

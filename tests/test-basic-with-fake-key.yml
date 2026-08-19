@@ -1,0 +1,47 @@
+name: Test basic action invocation with fake API key
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with fake gemini_api_key
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+
+      - name: Assert action ran (even if it failed due to invalid key)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The action should either succeed or fail with an auth error
+          # (not a setup/install error). Both 'success' and 'failure' are acceptable
+          # outcomes here since we're using a fake key.
+          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran to completion (outcome=$OUTCOME)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+
+      - name: Assert gemini commands were installed
+        run: |
+          if [ ! -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands directory was not created by the action"
+            exit 1
+          fi
+          TOML_COUNT=$(find .gemini/commands -name "*.toml" | wc -l)
+          echo "Found ${TOML_COUNT} command files"
+          if [ "$TOML_COUNT" -eq 0 ]; then
+            echo "FAIL: no command files found"
+            exit 1
+          fi
+          echo "PASS: commands installed"

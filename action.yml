@@ -195,9 +195,9 @@ runs:
       id: 'sanitize_workflow_name'
       shell: 'bash'
       run: |
-        SAFE_NAME=$(printf '%s' "${WORKFLOW_NAME}" | tr -d '\n\r')
-        SANITIZED=$(printf '%s' "${SAFE_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
-        echo "gh_workflow_name=$SANITIZED" >> "$GITHUB_OUTPUT"
+        SANITIZED=$(echo "${WORKFLOW_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
+        safe=$(printf '%s' "$SANITIZED" | tr -d '\n\r')
+        echo "gh_workflow_name=$safe" >> "$GITHUB_OUTPUT"
       env:
         WORKFLOW_NAME: '${{ inputs.workflow_name }}'
     - name: 'Configure Gemini CLI'

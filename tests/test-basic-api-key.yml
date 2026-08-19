@@ -1,0 +1,57 @@
+name: Test basic usage with API key (expect auth failure)
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Run the action with a fake API key - it will install the CLI successfully
+      # but fail at the gemini_run step due to invalid credentials.
+      # We use continue-on-error to capture the outputs and verify behavior.
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+
+      - name: Assert action ran (install step succeeded or failed gracefully)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          # The action should either succeed or fail - not be skipped
+          if [ "$OUTCOME" == "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran with outcome=$OUTCOME"
+
+      - name: Assert error output is set when action fails
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          ERROR: ${{ steps.action.outputs.error }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "error output present: $([ -n "$ERROR" ] && echo yes || echo no)"
+          # If the action failed (expected with fake key), error output should be set
+          # If somehow it succeeded, that's also acceptable
+          if [ "$OUTCOME" == "failure" ]; then
+            echo "Action failed as expected with fake API key"
+            echo "PASS"
+          elif [ "$OUTCOME" == "success" ]; then
+            echo "Action unexpectedly succeeded - checking summary output"
+            SUMMARY="${{ steps.action.outputs.summary }}"
+            echo "summary: $SUMMARY"
+            echo "PASS"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi

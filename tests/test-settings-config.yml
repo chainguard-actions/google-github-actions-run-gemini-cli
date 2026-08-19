@@ -1,0 +1,46 @@
+name: Test settings configuration
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with settings input
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+          settings: '{"theme":"dark","model":"gemini-2.0-flash"}'
+
+      - name: Assert settings file was created
+        run: |
+          echo "Checking .gemini/settings.json..."
+          if [ ! -f ".gemini/settings.json" ]; then
+            echo "FAIL: .gemini/settings.json was not created"
+            exit 1
+          fi
+          CONTENT=$(cat .gemini/settings.json)
+          echo "content: $CONTENT"
+          if ! echo "$CONTENT" | jq -e '.model == "gemini-2.0-flash"' > /dev/null 2>&1; then
+            echo "FAIL: settings.json does not contain expected model"
+            exit 1
+          fi
+          if ! echo "$CONTENT" | jq -e '.theme == "dark"' > /dev/null 2>&1; then
+            echo "FAIL: settings.json does not contain expected theme"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert settings file is valid JSON
+        run: |
+          if ! jq . .gemini/settings.json > /dev/null 2>&1; then
+            echo "FAIL: settings.json is not valid JSON"
+            exit 1
+          fi
+          echo "PASS: settings.json is valid JSON"
