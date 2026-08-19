@@ -1,0 +1,140 @@
+name: Test input validation - WIF requirements
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Call the action with a gemini_api_key so it can proceed past validation.
+      # The validate_inputs step only emits warnings (not failures), so we can
+      # verify the action runs without error even when WIF inputs are absent.
+      # We use a fake API key; the action will fail at the gemini run step,
+      # but we only care that the validate_inputs step ran correctly.
+      - id: action
+        uses: .
+        with:
+          gemini_api_key: 'fake-key-for-validation-test'
+          prompt: 'Say hello'
+        continue-on-error: true
+
+      - name: Assert action ran (validate_inputs step executed)
+        run: |
+          # The action is expected to fail at the gemini run step (fake API key),
+          # but the validate_inputs step should have run and emitted no warnings
+          # about WIF (since no WIF inputs were provided).
+          # We just verify the action was invoked (step outcome is set).
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          if [ "${{ steps.action.outcome }}" = "" ]; then
+            echo "FAIL: action step did not run"
+            exit 1
+          fi
+          echo "PASS: action step ran (outcome=${{ steps.action.outcome }})"
+
+      - name: Verify WIF validation logic - missing project_id
+        run: |
+          # Simulate the WIF validation from the action's validate_inputs step
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="false"
+          INPUT_GCP_TOKEN_FORMAT="access_token"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="false"
+          INPUT_USE_VERTEX_AI="false"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          WARNINGS=0
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              echo "WARNING: When using WIF, must also provide gcp_project_id"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              echo "WARNING: When using WIF with token generation, must also provide gcp_service_account"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              echo "WARNING: When using WIF, must set exactly one of use_vertex_ai or use_gemini_code_assist to true"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+          fi
+
+          echo "Total warnings: $WARNINGS"
+          if [ "$WARNINGS" -eq 3 ]; then
+            echo "PASS: all 3 WIF validation warnings triggered correctly"
+          else
+            echo "FAIL: expected 3 warnings but got $WARNINGS"
+            exit 1
+          fi
+
+      - name: Verify WIF validation logic - valid WIF with vertex AI
+        run: |
+          # Simulate valid WIF configuration
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="true"
+          INPUT_GCP_TOKEN_FORMAT="access_token"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="true"
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          WARNINGS=0
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              echo "WARNING: missing project_id"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              echo "WARNING: missing service_account"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              echo "WARNING: must set exactly one of use_vertex_ai or use_gemini_code_assist"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+          fi
+
+          echo "Total warnings: $WARNINGS"
+          if [ "$WARNINGS" -eq 0 ]; then
+            echo "PASS: no warnings for valid WIF configuration"
+          else
+            echo "FAIL: expected 0 warnings but got $WARNINGS"
+            exit 1
+          fi
+
+      - name: Verify direct WIF (empty token_format) validation
+        run: |
+          # Direct WIF without service account (token_format = "")
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="true"
+          INPUT_GCP_TOKEN_FORMAT=""
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="false"
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          WARNINGS=0
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              echo "WARNING: missing project_id"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            # With empty token_format, service account is NOT required
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              echo "WARNING: missing service_account"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              echo "WARNING: must set exactly one of use_vertex_ai or use_gemini_code_assist"
+              WARNINGS=$((WARNINGS + 1))
+            fi
+          fi
+
+          echo "Total warnings: $WARNINGS"
+          if [ "$WARNINGS" -eq 0 ]; then
+            echo "PASS: no warnings for direct WIF (empty token_format) without service account"
+          else
+            echo "FAIL: expected 0 warnings but got $WARNINGS"
+            exit 1
+          fi

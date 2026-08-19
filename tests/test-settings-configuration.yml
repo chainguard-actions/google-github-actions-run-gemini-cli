@@ -1,0 +1,67 @@
+name: Test settings configuration
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing .gemini directory
+        run: rm -rf .gemini/
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          prompt: 'Say hello'
+          gemini_api_key: 'fake-key-for-settings-test'
+          settings: '{"theme":"dark","model":"gemini-pro"}'
+
+      - name: Assert .gemini/settings.json was created
+        run: |
+          echo "Checking for .gemini/settings.json..."
+          if [ ! -f ".gemini/settings.json" ]; then
+            echo "FAIL: .gemini/settings.json was not created"
+            exit 1
+          fi
+          echo "Contents of .gemini/settings.json:"
+          cat .gemini/settings.json
+          echo ""
+
+          # Verify the content matches what was provided
+          THEME=$(cat .gemini/settings.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('theme',''))" 2>/dev/null || echo "")
+          MODEL=$(cat .gemini/settings.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('model',''))" 2>/dev/null || echo "")
+
+          echo "theme: $THEME"
+          echo "model: $MODEL"
+
+          if [ "$THEME" != "dark" ]; then
+            echo "FAIL: expected theme 'dark' but got '$THEME'"
+            exit 1
+          fi
+          if [ "$MODEL" != "gemini-pro" ]; then
+            echo "FAIL: expected model 'gemini-pro' but got '$MODEL'"
+            exit 1
+          fi
+          echo "PASS: settings.json created with correct content"
+
+      - name: Assert .gemini/commands directory was populated
+        run: |
+          echo "Checking for .gemini/commands directory..."
+          if [ ! -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands directory was not created"
+            exit 1
+          fi
+          echo "Contents of .gemini/commands:"
+          ls -la .gemini/commands/
+          # The action copies files from .github/commands/ to .gemini/commands/
+          # Verify at least one command file was copied
+          FILE_COUNT=$(ls .gemini/commands/ | wc -l)
+          echo "File count: $FILE_COUNT"
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "FAIL: no command files were copied to .gemini/commands/"
+            exit 1
+          fi
+          echo "PASS: .gemini/commands populated with $FILE_COUNT file(s)"
