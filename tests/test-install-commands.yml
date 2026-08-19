@@ -1,0 +1,58 @@
+name: Test custom commands installation
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify commands directory does not exist before action
+        run: |
+          if [ -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands should not exist before action runs"
+            exit 1
+          fi
+          echo "PASS: .gemini/commands does not exist yet"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+
+      - name: Assert custom commands were installed
+        run: |
+          echo "Checking .gemini/commands/..."
+          if [ ! -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands directory was not created"
+            exit 1
+          fi
+          echo "PASS: .gemini/commands directory exists"
+
+      - name: Assert specific command files were installed
+        run: |
+          EXPECTED_COMMANDS=(
+            "gemini-invoke.toml"
+            "gemini-review.toml"
+            "gemini-triage.toml"
+          )
+          for cmd in "${EXPECTED_COMMANDS[@]}"; do
+            if [ ! -f ".gemini/commands/${cmd}" ]; then
+              echo "FAIL: expected command file '.gemini/commands/${cmd}' not found"
+              exit 1
+            fi
+            echo "PASS: found .gemini/commands/${cmd}"
+          done
+          echo "PASS: all expected command files were installed"
+
+      - name: Assert gemini CLI was installed
+        run: |
+          if ! command -v gemini > /dev/null 2>&1; then
+            echo "FAIL: gemini CLI was not installed"
+            exit 1
+          fi
+          echo "PASS: gemini CLI is installed"
+          gemini --version || echo "(version command not available)"

@@ -1,0 +1,56 @@
+name: Test settings configuration
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Verify settings.json does not exist before action
+        run: |
+          if [ -f ".gemini/settings.json" ]; then
+            echo "FAIL: .gemini/settings.json should not exist before action runs"
+            exit 1
+          fi
+          echo "PASS: .gemini/settings.json does not exist yet"
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+          settings: '{"theme":"Default","selectedAuthType":"gemini-api-key"}'
+
+      - name: Assert settings.json was created with correct content
+        run: |
+          echo "Checking .gemini/settings.json..."
+          if [ ! -f ".gemini/settings.json" ]; then
+            echo "FAIL: .gemini/settings.json was not created"
+            exit 1
+          fi
+          CONTENT=$(cat .gemini/settings.json)
+          echo "content: $CONTENT"
+          if ! echo "$CONTENT" | grep -q "Default"; then
+            echo "FAIL: settings.json does not contain expected content"
+            exit 1
+          fi
+          echo "PASS: settings.json was created with correct content"
+
+      - name: Assert custom commands were installed
+        run: |
+          echo "Checking .gemini/commands/..."
+          if [ ! -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands directory was not created"
+            exit 1
+          fi
+          # Check that at least one command file was copied
+          CMD_COUNT=$(ls .gemini/commands/*.toml 2>/dev/null | wc -l)
+          echo "command files found: $CMD_COUNT"
+          if [ "$CMD_COUNT" -eq 0 ]; then
+            echo "FAIL: no command files were installed"
+            exit 1
+          fi
+          echo "PASS: $CMD_COUNT command files were installed"
