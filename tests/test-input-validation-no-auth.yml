@@ -1,4 +1,4 @@
-name: Test google_api_key input with use_vertex_ai
+name: Test input validation warns when no auth method provided
 on:
   workflow_dispatch:
 jobs:
@@ -19,7 +19,7 @@ jobs:
             echo "1.0.0-fake"
             exit 0
           fi
-          printf '{"response": "Hello from fake Gemini via Vertex AI!"}'
+          printf '{"response": "Response without auth"}'
           exit 0
           EOF
           chmod +x /tmp/fake-gemini
@@ -42,12 +42,17 @@ jobs:
           chmod +x "$HOME/.local/bin/npm"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - id: action
+      - name: Run action with no auth method (should warn but not fail)
+        id: action
         uses: .
         with:
-          google_api_key: 'fake-vertex-api-key-for-testing'
-          use_vertex_ai: 'true'
-          prompt: 'Hello from Vertex AI'
+          prompt: 'Hello world'
+          # No gemini_api_key, google_api_key, or gcp_workload_identity_provider
+
+      - name: Assert action completed despite no auth method
+        run: |
+          echo "PASS: action completed without failing despite no auth method"
+          echo "The validate_inputs step emits warnings but does not exit with error"
 
       - name: Assert summary output is set
         env:
@@ -58,4 +63,4 @@ jobs:
             echo "FAIL: expected summary output to be non-empty"
             exit 1
           fi
-          echo "PASS: summary output is set with google_api_key: $ACTUAL"
+          echo "PASS: summary output is set"

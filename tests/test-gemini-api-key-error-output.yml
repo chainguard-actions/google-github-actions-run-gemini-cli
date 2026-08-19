@@ -1,0 +1,49 @@
+name: Test Gemini API key - error output on failure
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with fake Gemini API key
+        id: action
+        uses: .
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+          gemini_cli_version: 'latest'
+        continue-on-error: true
+
+      - name: Assert action outcome and outputs
+        env:
+          SUMMARY: ${{ steps.action.outputs.summary }}
+          ERROR: ${{ steps.action.outputs.error }}
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          echo "Summary output: $SUMMARY"
+          echo "Error output: $ERROR"
+
+          # The action should fail because the API key is fake
+          # But it should have set the error output
+          if [ "${{ steps.action.outcome }}" = "failure" ]; then
+            echo "PASS: action failed as expected with fake API key"
+          elif [ "${{ steps.action.outcome }}" = "success" ]; then
+            echo "INFO: action succeeded (unexpected with fake key, but not blocking)"
+          else
+            echo "FAIL: unexpected outcome: ${{ steps.action.outcome }}"
+            exit 1
+          fi
+          echo "PASS"
+
+      - name: Assert gemini-artifacts directory was created
+        run: |
+          if [ -d "gemini-artifacts" ]; then
+            echo "PASS: gemini-artifacts directory was created"
+            ls -la gemini-artifacts/
+          else
+            echo "FAIL: gemini-artifacts directory was not created"
+            exit 1
+          fi

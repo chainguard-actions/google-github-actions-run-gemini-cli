@@ -1,0 +1,91 @@
+name: Test settings configuration
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up fake npm and gemini CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+
+          cat > /tmp/fake-gemini << 'EOF'
+          #!/bin/sh
+          if [ "$1" = "--version" ]; then
+            echo "1.0.0-fake"
+            exit 0
+          fi
+          printf '{"response": "Settings test response"}'
+          exit 0
+          EOF
+          chmod +x /tmp/fake-gemini
+
+          REAL_NPM="$(which npm)"
+          cat > "$HOME/.local/bin/npm" << NPMEOF
+          #!/bin/sh
+          case "\$*" in
+            *@google/gemini-cli*)
+              echo "Intercepted gemini-cli install, installing fake binary"
+              cp /tmp/fake-gemini /usr/local/bin/gemini
+              chmod +x /usr/local/bin/gemini
+              exit 0
+              ;;
+            *)
+              exec "${REAL_NPM}" "\$@"
+              ;;
+          esac
+          NPMEOF
+          chmod +x "$HOME/.local/bin/npm"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run action with custom settings
+        id: action
+        uses: .
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Hello'
+          settings: '{"theme": "dark", "model": "gemini-pro"}'
+
+      - name: Assert settings file was created with correct content
+        run: |
+          echo "Checking if .gemini/settings.json was created..."
+          if [ ! -f ".gemini/settings.json" ]; then
+            echo "FAIL: .gemini/settings.json was not created"
+            exit 1
+          fi
+          echo "Settings file contents:"
+          cat .gemini/settings.json
+          THEME=$(jq -r '.theme' .gemini/settings.json)
+          echo "theme: $THEME"
+          if [ "$THEME" != "dark" ]; then
+            echo "FAIL: expected theme 'dark', got '$THEME'"
+            exit 1
+          fi
+          MODEL=$(jq -r '.model' .gemini/settings.json)
+          echo "model: $MODEL"
+          if [ "$MODEL" != "gemini-pro" ]; then
+            echo "FAIL: expected model 'gemini-pro', got '$MODEL'"
+            exit 1
+          fi
+          echo "PASS: settings.json was created with correct content"
+
+      - name: Assert custom commands were installed
+        run: |
+          echo "Checking if .gemini/commands directory was created..."
+          if [ ! -d ".gemini/commands" ]; then
+            echo "FAIL: .gemini/commands directory was not created"
+            exit 1
+          fi
+          echo "Commands directory contents:"
+          ls -la .gemini/commands/
+          # Verify at least one command file was copied
+          CMD_COUNT=$(ls .gemini/commands/ | wc -l)
+          echo "Command file count: $CMD_COUNT"
+          if [ "$CMD_COUNT" -eq 0 ]; then
+            echo "FAIL: expected command files to be copied to .gemini/commands/"
+            exit 1
+          fi
+          echo "PASS: .gemini/commands directory exists with $CMD_COUNT command file(s)"

@@ -1,4 +1,4 @@
-name: Test google_api_key input with use_vertex_ai
+name: Test basic prompt with mocked gemini CLI
 on:
   workflow_dispatch:
 jobs:
@@ -19,17 +19,23 @@ jobs:
             echo "1.0.0-fake"
             exit 0
           fi
-          printf '{"response": "Hello from fake Gemini via Vertex AI!"}'
+          # Output valid JSON to stdout for any prompt invocation
+          printf '{"response": "Hello from fake Gemini! The answer is 42."}'
           exit 0
           EOF
           chmod +x /tmp/fake-gemini
 
+          # Find the real npm path before we shadow it
           REAL_NPM="$(which npm)"
+          echo "Real npm: $REAL_NPM"
+
+          # Create a fake npm wrapper that intercepts gemini-cli installs
           cat > "$HOME/.local/bin/npm" << NPMEOF
           #!/bin/sh
           case "\$*" in
             *@google/gemini-cli*)
               echo "Intercepted gemini-cli install, installing fake binary"
+              # Install fake gemini into /usr/local/bin (standard global npm bin)
               cp /tmp/fake-gemini /usr/local/bin/gemini
               chmod +x /usr/local/bin/gemini
               exit 0
@@ -45,9 +51,8 @@ jobs:
       - id: action
         uses: .
         with:
-          google_api_key: 'fake-vertex-api-key-for-testing'
-          use_vertex_ai: 'true'
-          prompt: 'Hello from Vertex AI'
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'What is 6 times 7?'
 
       - name: Assert summary output is set
         env:
@@ -58,4 +63,15 @@ jobs:
             echo "FAIL: expected summary output to be non-empty"
             exit 1
           fi
-          echo "PASS: summary output is set with google_api_key: $ACTUAL"
+          echo "PASS: summary output is set: $ACTUAL"
+
+      - name: Assert error output is empty
+        env:
+          ACTUAL: ${{ steps.action.outputs.error }}
+        run: |
+          echo "actual: $ACTUAL"
+          if [ -n "$ACTUAL" ]; then
+            echo "FAIL: expected error output to be empty, got: $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: error output is empty"

@@ -1,0 +1,31 @@
+name: Test custom commands installation
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with fake API key
+        id: action
+        uses: .
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Hello'
+          workflow_name: 'My Test Workflow! @#$'
+        continue-on-error: true
+
+      - name: Assert custom commands directory was created
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          # The Install Custom Commands step should have created .gemini/commands/
+          if [ -d ".gemini/commands" ]; then
+            echo "PASS: .gemini/commands directory was created"
+            ls -la .gemini/commands/ || true
+          else
+            echo "FAIL: .gemini/commands directory was not created"
+            exit 1
+          fi
+          echo "PASS"

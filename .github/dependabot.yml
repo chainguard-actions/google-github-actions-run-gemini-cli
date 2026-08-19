@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    rebase-strategy: 'disabled'
+    schedule:
+      interval: 'daily'
+    commit-message:
+      prefix: 'security: '
+    open-pull-requests-limit: 0 # only check security updates
+
+  - package-ecosystem: 'github-actions'
+    directories:
+      - '/'
+      - '/examples/workflows/*'
+    rebase-strategy: 'disabled'
+    schedule:
+      interval: 'daily'

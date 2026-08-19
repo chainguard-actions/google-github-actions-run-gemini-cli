@@ -1,4 +1,4 @@
-name: Test google_api_key input with use_vertex_ai
+name: Test gemini CLI version specification
 on:
   workflow_dispatch:
 jobs:
@@ -7,7 +7,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up fake npm and gemini CLI
+      - name: Set up fake npm that records the requested version
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
@@ -16,20 +16,21 @@ jobs:
           cat > /tmp/fake-gemini << 'EOF'
           #!/bin/sh
           if [ "$1" = "--version" ]; then
-            echo "1.0.0-fake"
+            echo "0.1.9-fake"
             exit 0
           fi
-          printf '{"response": "Hello from fake Gemini via Vertex AI!"}'
+          printf '{"response": "Version test response"}'
           exit 0
           EOF
           chmod +x /tmp/fake-gemini
 
           REAL_NPM="$(which npm)"
+          # Create a fake npm that records the install command and installs fake gemini
           cat > "$HOME/.local/bin/npm" << NPMEOF
           #!/bin/sh
           case "\$*" in
             *@google/gemini-cli*)
-              echo "Intercepted gemini-cli install, installing fake binary"
+              echo "Intercepted gemini-cli install: \$*" | tee /tmp/npm-install-args.txt
               cp /tmp/fake-gemini /usr/local/bin/gemini
               chmod +x /usr/local/bin/gemini
               exit 0
@@ -42,12 +43,23 @@ jobs:
           chmod +x "$HOME/.local/bin/npm"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - id: action
+      - name: Run action with specific semver version
+        id: action
         uses: .
         with:
-          google_api_key: 'fake-vertex-api-key-for-testing'
-          use_vertex_ai: 'true'
-          prompt: 'Hello from Vertex AI'
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Hello'
+          gemini_cli_version: '0.1.9'
+
+      - name: Assert correct version was requested from npm
+        run: |
+          echo "npm install args:"
+          cat /tmp/npm-install-args.txt
+          if ! grep -q '@google/gemini-cli@0.1.9' /tmp/npm-install-args.txt; then
+            echo "FAIL: expected npm to be called with @google/gemini-cli@0.1.9"
+            exit 1
+          fi
+          echo "PASS: correct version was requested from npm"
 
       - name: Assert summary output is set
         env:
@@ -58,4 +70,4 @@ jobs:
             echo "FAIL: expected summary output to be non-empty"
             exit 1
           fi
-          echo "PASS: summary output is set with google_api_key: $ACTUAL"
+          echo "PASS: summary output is set"

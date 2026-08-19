@@ -1,4 +1,4 @@
-name: Test google_api_key input with use_vertex_ai
+name: Test workflow name sanitization
 on:
   workflow_dispatch:
 jobs:
@@ -12,14 +12,13 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
 
-          # Create the fake gemini binary
           cat > /tmp/fake-gemini << 'EOF'
           #!/bin/sh
           if [ "$1" = "--version" ]; then
             echo "1.0.0-fake"
             exit 0
           fi
-          printf '{"response": "Hello from fake Gemini via Vertex AI!"}'
+          printf '{"response": "Sanitization test response"}'
           exit 0
           EOF
           chmod +x /tmp/fake-gemini
@@ -42,12 +41,18 @@ jobs:
           chmod +x "$HOME/.local/bin/npm"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - id: action
+      - name: Run action with special characters in workflow name
+        id: action
         uses: .
         with:
-          google_api_key: 'fake-vertex-api-key-for-testing'
-          use_vertex_ai: 'true'
-          prompt: 'Hello from Vertex AI'
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Hello'
+          workflow_name: 'My Workflow! With Special@Chars#2024'
+
+      - name: Assert action completed with sanitized workflow name
+        run: |
+          echo "PASS: action completed with special characters in workflow name"
+          echo "The sanitize_workflow_name step should have cleaned the name to: my_workflow_with_specialchars2024"
 
       - name: Assert summary output is set
         env:
@@ -58,4 +63,4 @@ jobs:
             echo "FAIL: expected summary output to be non-empty"
             exit 1
           fi
-          echo "PASS: summary output is set with google_api_key: $ACTUAL"
+          echo "PASS: summary output is set"

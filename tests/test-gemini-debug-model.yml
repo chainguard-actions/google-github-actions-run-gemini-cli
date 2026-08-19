@@ -1,4 +1,4 @@
-name: Test google_api_key input with use_vertex_ai
+name: Test gemini_debug and gemini_model inputs
 on:
   workflow_dispatch:
 jobs:
@@ -12,14 +12,15 @@ jobs:
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
 
-          # Create the fake gemini binary
+          # Create the fake gemini binary that handles --debug and --yolo flags
           cat > /tmp/fake-gemini << 'EOF'
           #!/bin/sh
           if [ "$1" = "--version" ]; then
             echo "1.0.0-fake"
             exit 0
           fi
-          printf '{"response": "Hello from fake Gemini via Vertex AI!"}'
+          # Output valid JSON regardless of flags
+          printf '{"response": "Hello from fake Gemini with debug mode!"}'
           exit 0
           EOF
           chmod +x /tmp/fake-gemini
@@ -45,9 +46,10 @@ jobs:
       - id: action
         uses: .
         with:
-          google_api_key: 'fake-vertex-api-key-for-testing'
-          use_vertex_ai: 'true'
-          prompt: 'Hello from Vertex AI'
+          gemini_api_key: 'fake-api-key-for-testing'
+          gemini_model: 'gemini-2.0-flash'
+          gemini_debug: 'true'
+          prompt: 'Say hello'
 
       - name: Assert summary output is set
         env:
@@ -58,4 +60,4 @@ jobs:
             echo "FAIL: expected summary output to be non-empty"
             exit 1
           fi
-          echo "PASS: summary output is set with google_api_key: $ACTUAL"
+          echo "PASS: summary output is set with debug and model inputs: $ACTUAL"

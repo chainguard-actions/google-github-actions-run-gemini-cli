@@ -1,0 +1,74 @@
+name: Test gemini CLI error output capture
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up fake npm and failing gemini CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+
+          # Create a fake gemini that outputs a JSON error to stderr and exits with failure
+          cat > /tmp/fake-gemini-fail << 'EOF'
+          #!/bin/sh
+          if [ "$1" = "--version" ]; then
+            echo "1.0.0-fake"
+            exit 0
+          fi
+          # Output JSON error to stderr and fail
+          printf '{"error": {"message": "API key invalid", "code": 401}}' >&2
+          exit 1
+          EOF
+          chmod +x /tmp/fake-gemini-fail
+
+          REAL_NPM="$(which npm)"
+          cat > "$HOME/.local/bin/npm" << NPMEOF
+          #!/bin/sh
+          case "\$*" in
+            *@google/gemini-cli*)
+              echo "Intercepted gemini-cli install, installing failing fake binary"
+              cp /tmp/fake-gemini-fail /usr/local/bin/gemini
+              chmod +x /usr/local/bin/gemini
+              exit 0
+              ;;
+            *)
+              exec "${REAL_NPM}" "\$@"
+              ;;
+          esac
+          NPMEOF
+          chmod +x "$HOME/.local/bin/npm"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run action with failing gemini CLI (expect failure)
+        id: action
+        uses: .
+        with:
+          gemini_api_key: 'invalid-api-key'
+          prompt: 'Hello'
+        continue-on-error: true
+
+      - name: Assert action failed as expected
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "FAIL: expected action to fail with invalid API key, but got: $OUTCOME"
+            exit 1
+          fi
+          echo "PASS: action failed as expected with invalid API key"
+
+      - name: Assert error output was captured
+        env:
+          ACTUAL: ${{ steps.action.outputs.error }}
+        run: |
+          echo "actual error: $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "FAIL: expected error output to be non-empty when gemini fails"
+            exit 1
+          fi
+          echo "PASS: error output was captured: $ACTUAL"
