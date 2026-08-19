@@ -1,0 +1,40 @@
+name: Test install Gemini CLI
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          prompt: 'Say hello'
+          gemini_api_key: 'fake-api-key-for-testing'
+          gemini_cli_version: 'latest'
+
+      - name: Assert action ran
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          # The action will fail at gemini_run with a fake API key,
+          # but the install step should have succeeded.
+          if [ "${{ steps.action.outcome }}" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran (outcome: ${{ steps.action.outcome }})"
+
+      - name: Assert gemini CLI was installed
+        run: |
+          if command -v gemini > /dev/null 2>&1; then
+            echo "PASS: gemini CLI is installed"
+            gemini --version || echo "version command not available"
+          else
+            echo "FAIL: gemini CLI not found in PATH"
+            exit 1
+          fi

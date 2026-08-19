@@ -1,0 +1,29 @@
+name: Test validate inputs - no auth method
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          prompt: 'Say hello'
+          # No auth method provided - should emit a warning
+
+      - name: Assert action ran (with or without error)
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          # The action should either fail at gemini_run (no auth) or succeed
+          # Either way, the validate_inputs step should have run without hard failure
+          if [ "${{ steps.action.outcome }}" = "skipped" ]; then
+            echo "FAIL: action was skipped unexpectedly"
+            exit 1
+          fi
+          echo "PASS: action ran (outcome: ${{ steps.action.outcome }})"

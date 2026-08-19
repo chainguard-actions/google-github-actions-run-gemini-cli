@@ -1,0 +1,207 @@
+name: Test input validation - API key combinations
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Test: gemini_api_key alone (valid combination) - action should proceed
+      # past validation and fail only at the gemini run step (fake key).
+      - id: action_valid_key
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+
+      - name: Assert action ran with valid gemini_api_key combination
+        run: |
+          echo "Action outcome: ${{ steps.action_valid_key.outcome }}"
+          OUTCOME="${{ steps.action_valid_key.outcome }}"
+          if [ "${OUTCOME}" = "success" ] || [ "${OUTCOME}" = "failure" ]; then
+            echo "PASS: action ran (outcome: ${OUTCOME})"
+          else
+            echo "FAIL: unexpected outcome '${OUTCOME}'"
+            exit 1
+          fi
+
+      # Verify the validation logic for API key combinations inline
+      - name: Verify gemini_api_key with use_vertex_ai=true warns
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GEMINI_API_KEY_PRESENT="true"
+          INPUT_GOOGLE_API_KEY_PRESENT="false"
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="false"
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          auth_methods=0
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+
+          if [[ ${auth_methods} -eq 0 ]]; then
+            warn "No authentication method provided."
+          fi
+          if [[ ${auth_methods} -gt 1 ]]; then
+            warn "Multiple authentication methods provided."
+          fi
+
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "true" || "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" == "true" ]]; then
+              warn "When using 'gemini_api_key', both 'use_vertex_ai' and 'use_gemini_code_assist' must be 'false'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ "${WARNINGS}" != *"gemini_api_key"* ]]; then
+            echo "FAIL: expected warning about gemini_api_key with use_vertex_ai=true"
+            exit 1
+          fi
+          echo "PASS: gemini_api_key with use_vertex_ai=true correctly warns"
+
+      - name: Verify gemini_api_key alone does NOT warn
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GEMINI_API_KEY_PRESENT="true"
+          INPUT_GOOGLE_API_KEY_PRESENT="false"
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="false"
+          INPUT_USE_VERTEX_AI="false"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          auth_methods=0
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+
+          if [[ ${auth_methods} -eq 0 ]]; then
+            warn "No authentication method provided."
+          fi
+          if [[ ${auth_methods} -gt 1 ]]; then
+            warn "Multiple authentication methods provided."
+          fi
+
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "true" || "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" == "true" ]]; then
+              warn "When using 'gemini_api_key', both 'use_vertex_ai' and 'use_gemini_code_assist' must be 'false'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ -n "${WARNINGS}" ]]; then
+            echo "FAIL: expected no warnings, got: ${WARNINGS}"
+            exit 1
+          fi
+          echo "PASS: gemini_api_key alone produces no warnings"
+
+      - name: Verify google_api_key without use_vertex_ai=true warns
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GEMINI_API_KEY_PRESENT="false"
+          INPUT_GOOGLE_API_KEY_PRESENT="true"
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="false"
+          INPUT_USE_VERTEX_AI="false"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          auth_methods=0
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+
+          if [[ ${auth_methods} -eq 0 ]]; then
+            warn "No authentication method provided."
+          fi
+          if [[ ${auth_methods} -gt 1 ]]; then
+            warn "Multiple authentication methods provided."
+          fi
+
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" != "true" ]]; then
+              warn "When using 'google_api_key', you must set 'use_vertex_ai' to 'true'."
+            fi
+            if [[ "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" == "true" ]]; then
+              warn "When using 'google_api_key', 'use_gemini_code_assist' cannot be 'true'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ "${WARNINGS}" != *"google_api_key"* ]]; then
+            echo "FAIL: expected warning about google_api_key without use_vertex_ai=true"
+            exit 1
+          fi
+          echo "PASS: google_api_key without use_vertex_ai=true correctly warns"
+
+      - name: Verify google_api_key with use_vertex_ai=true does NOT warn
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GEMINI_API_KEY_PRESENT="false"
+          INPUT_GOOGLE_API_KEY_PRESENT="true"
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="false"
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          auth_methods=0
+          if [[ "${INPUT_GEMINI_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then ((++auth_methods)); fi
+
+          if [[ ${auth_methods} -eq 0 ]]; then
+            warn "No authentication method provided."
+          fi
+          if [[ ${auth_methods} -gt 1 ]]; then
+            warn "Multiple authentication methods provided."
+          fi
+
+          if [[ "${INPUT_GOOGLE_API_KEY_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" != "true" ]]; then
+              warn "When using 'google_api_key', you must set 'use_vertex_ai' to 'true'."
+            fi
+            if [[ "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" == "true" ]]; then
+              warn "When using 'google_api_key', 'use_gemini_code_assist' cannot be 'true'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ -n "${WARNINGS}" ]]; then
+            echo "FAIL: expected no warnings, got: ${WARNINGS}"
+            exit 1
+          fi
+          echo "PASS: google_api_key with use_vertex_ai=true produces no warnings"

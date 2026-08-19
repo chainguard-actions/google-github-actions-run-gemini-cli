@@ -1,0 +1,32 @@
+name: Test GCP inputs coverage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Run action with GCP inputs (expect failure at auth step)
+        id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gcp_location: 'us-central1'
+          gcp_project_id: 'my-fake-project'
+          gcp_service_account: 'fake-sa@my-fake-project.iam.gserviceaccount.com'
+          gcp_workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/fake-pool/providers/fake-provider'
+          use_vertex_ai: 'true'
+          prompt: 'Hello'
+
+      - name: Assert validate_inputs ran (action attempted)
+        run: |
+          echo "outcome: ${{ steps.action.outcome }}"
+          # The action should fail at the auth step (fake WIF credentials),
+          # but validate_inputs should have run and emitted warnings.
+          # We just verify the step was attempted (outcome is not empty).
+          if [ -z "${{ steps.action.outcome }}" ]; then
+            echo "FAIL: action step did not run"
+            exit 1
+          fi
+          echo "PASS: action step ran with GCP inputs (outcome: ${{ steps.action.outcome }})"

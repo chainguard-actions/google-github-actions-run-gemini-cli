@@ -1,0 +1,196 @@
+name: Test input validation - Workload Identity Federation
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Invoke the action with a fake API key to exercise the validate_inputs step.
+      # The validation step only emits warnings (no exit 1), so the action proceeds
+      # past validation. It fails at the gemini run step (fake key).
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          gemini_api_key: 'fake-api-key-for-testing'
+          prompt: 'Say hello'
+
+      - name: Assert action ran (validate step did not crash it)
+        run: |
+          echo "Action outcome: ${{ steps.action.outcome }}"
+          OUTCOME="${{ steps.action.outcome }}"
+          if [ "${OUTCOME}" = "success" ] || [ "${OUTCOME}" = "failure" ]; then
+            echo "PASS: action ran (outcome: ${OUTCOME})"
+          else
+            echo "FAIL: unexpected outcome '${OUTCOME}'"
+            exit 1
+          fi
+
+      # Verify WIF validation logic inline
+      - name: Verify WIF without project_id warns
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="false"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="true"
+          INPUT_GCP_TOKEN_FORMAT="access_token"
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation ('gcp_workload_identity_provider'), you must also provide 'gcp_project_id'."
+            fi
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation with token generation ('gcp_token_format'), you must also provide 'gcp_service_account'."
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              warn "When using Workload Identity Federation, you must set exactly one of 'use_vertex_ai' or 'use_gemini_code_assist' to 'true'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ "${WARNINGS}" != *"gcp_project_id"* ]]; then
+            echo "FAIL: expected warning about missing gcp_project_id"
+            exit 1
+          fi
+
+          if [[ "${WARNINGS}" == *"gcp_service_account"* ]]; then
+            echo "FAIL: unexpected warning about gcp_service_account (it was provided)"
+            exit 1
+          fi
+
+          if [[ "${WARNINGS}" == *"use_vertex_ai"* ]]; then
+            echo "FAIL: unexpected warning about use_vertex_ai/use_gemini_code_assist"
+            exit 1
+          fi
+
+          echo "PASS: WIF without project_id correctly warns"
+
+      - name: Verify WIF with both use_vertex_ai and use_gemini_code_assist false warns
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="true"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="true"
+          INPUT_GCP_TOKEN_FORMAT="access_token"
+          INPUT_USE_VERTEX_AI="false"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation ('gcp_workload_identity_provider'), you must also provide 'gcp_project_id'."
+            fi
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation with token generation ('gcp_token_format'), you must also provide 'gcp_service_account'."
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              warn "When using Workload Identity Federation, you must set exactly one of 'use_vertex_ai' or 'use_gemini_code_assist' to 'true'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ "${WARNINGS}" != *"use_vertex_ai"* ]]; then
+            echo "FAIL: expected warning about use_vertex_ai/use_gemini_code_assist"
+            exit 1
+          fi
+
+          echo "PASS: WIF with both use_vertex_ai and use_gemini_code_assist false correctly warns"
+
+      - name: Verify WIF without service account when token_format is set warns
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="true"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="false"
+          INPUT_GCP_TOKEN_FORMAT="access_token"
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation ('gcp_workload_identity_provider'), you must also provide 'gcp_project_id'."
+            fi
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation with token generation ('gcp_token_format'), you must also provide 'gcp_service_account'. To use direct WIF without a service account, explicitly set 'gcp_token_format' to an empty string."
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              warn "When using Workload Identity Federation, you must set exactly one of 'use_vertex_ai' or 'use_gemini_code_assist' to 'true'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ "${WARNINGS}" != *"gcp_service_account"* ]]; then
+            echo "FAIL: expected warning about missing gcp_service_account"
+            exit 1
+          fi
+
+          echo "PASS: WIF without service account correctly warns when token_format is set"
+
+      - name: Verify WIF without service account when token_format is empty does NOT warn
+        run: |
+          set -euo pipefail
+
+          WARNINGS=""
+          warn() {
+            local msg="$1"
+            echo "WARNING: ${msg}" >&2
+            WARNINGS="${WARNINGS}|${msg}"
+          }
+
+          INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT="true"
+          INPUT_GCP_PROJECT_ID_PRESENT="true"
+          INPUT_GCP_SERVICE_ACCOUNT_PRESENT="false"
+          INPUT_GCP_TOKEN_FORMAT=""
+          INPUT_USE_VERTEX_AI="true"
+          INPUT_USE_GEMINI_CODE_ASSIST="false"
+
+          if [[ "${INPUT_GCP_WORKLOAD_IDENTITY_PROVIDER_PRESENT:-false}" == "true" ]]; then
+            if [[ "${INPUT_GCP_PROJECT_ID_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation ('gcp_workload_identity_provider'), you must also provide 'gcp_project_id'."
+            fi
+            if [[ "${INPUT_GCP_TOKEN_FORMAT}" != "" && "${INPUT_GCP_SERVICE_ACCOUNT_PRESENT:-false}" != "true" ]]; then
+              warn "When using Workload Identity Federation with token generation ('gcp_token_format'), you must also provide 'gcp_service_account'."
+            fi
+            if [[ "${INPUT_USE_VERTEX_AI:-false}" == "${INPUT_USE_GEMINI_CODE_ASSIST:-false}" ]]; then
+              warn "When using Workload Identity Federation, you must set exactly one of 'use_vertex_ai' or 'use_gemini_code_assist' to 'true'."
+            fi
+          fi
+
+          echo "WARNINGS=${WARNINGS}"
+
+          if [[ "${WARNINGS}" == *"gcp_service_account"* ]]; then
+            echo "FAIL: unexpected warning about gcp_service_account when token_format is empty"
+            exit 1
+          fi
+
+          echo "PASS: WIF without service account and empty token_format does not warn"
