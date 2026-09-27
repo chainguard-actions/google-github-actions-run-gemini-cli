@@ -7,22 +7,24 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Run action with google_api_key input
-        id: action
+      - id: action
         uses: .
         continue-on-error: true
         with:
-          google_api_key: 'fake-google-api-key-for-coverage'
+          google_api_key: 'fake-google-api-key-for-input-coverage'
           use_vertex_ai: 'true'
-          prompt: 'Hello'
+          prompt: 'Say hello'
 
-      - name: Assert action was attempted with google_api_key input
+      - name: Assert action ran (fails gracefully with fake google_api_key)
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
         run: |
-          echo "outcome: ${{ steps.action.outcome }}"
-          # The action will fail at the gemini_run step due to fake API key,
-          # but the google_api_key input is exercised. We verify the step ran.
-          if [ -z "${{ steps.action.outcome }}" ]; then
-            echo "FAIL: action step did not run"
+          echo "outcome: $OUTCOME"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully as expected with fake google_api_key"
+          elif [ "$OUTCOME" = "success" ]; then
+            echo "PASS: action succeeded (real API key available)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
           fi
-          echo "PASS: action step ran with google_api_key input (outcome: ${{ steps.action.outcome }})"

@@ -1,4 +1,4 @@
-name: Test gemini_debug and gemini_model inputs coverage
+name: Test extensions input coverage
 on:
   workflow_dispatch:
 jobs:
@@ -12,11 +12,10 @@ jobs:
         continue-on-error: true
         with:
           gemini_api_key: 'fake-api-key-for-input-coverage'
-          gemini_debug: 'true'
-          gemini_model: 'gemini-2.0-flash'
+          extensions: '[]'
           prompt: 'Say hello'
 
-      - name: Assert action ran (fails gracefully with fake API key)
+      - name: Assert action ran (fails gracefully with fake API key, extensions input was passed)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
