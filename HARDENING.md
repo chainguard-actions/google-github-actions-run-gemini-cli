@@ -10,97 +10,37 @@
 
 **Harden Agent Version:** `2`
 
-Action **google-github-actions--run-gemini-cli/v0.1.22** was hardened automatically. 2 finding(s) were identified and resolved across 2 iteration(s).
+Action **google-github-actions--run-gemini-cli/v0.1.22** was hardened automatically. 1 finding(s) were identified and resolved across 2 iteration(s).
 
 ## Findings Fixed
 
 ### unpinned-uses (severity: high)
 
-Multiple files reference GitHub Actions using mutable tags or branch names instead of pinned 40-character SHA commit hashes, making them vulnerable to supply-chain attacks if the referenced tag or branch is moved.
+Two `uses:` references in action.yml are pinned to mutable version tags instead of immutable full SHA digests, making them vulnerable to supply-chain attacks if the upstream tag is moved or the repository is compromised.
 
-action.yml:
-  - uses: 'google-github-actions/auth@v3' (tag)
-  - uses: 'actions/upload-artifact@v6' (tag)
+1. `uses: 'google-github-actions/auth@v3'` — uses mutable tag `v3` (marked `# ratchet:exclude` but still unpinned)
+2. `uses: 'actions/upload-artifact@v6'` — uses mutable tag `v6` (marked `# ratchet:exclude` but still unpinned)
 
-.github/workflows/draft-release.yml:
-  - uses: 'google-github-actions/.github/.github/workflows/draft-release.yml@v3' (tag)
-
-.github/workflows/evals-nightly.yml:
-  - uses: 'actions/checkout@v4' (tag, appears twice)
-  - uses: 'actions/setup-node@v4' (tag, appears twice)
-  - uses: 'actions/upload-artifact@v4' (tag)
-  - uses: 'actions/download-artifact@v4' (tag)
-
-.github/workflows/gemini-invoke.yml:
-  - uses: 'actions/checkout@v4' (tag)
-  - uses: 'google-github-actions/run-gemini-cli@main' (branch)
-
-.github/workflows/gemini-issue-fixer.yml:
-  - uses: 'google-github-actions/run-gemini-cli@main' (branch)
-
-.github/workflows/gemini-plan-execute.yml:
-  - uses: 'actions/checkout@v4' (tag)
-  - uses: 'google-github-actions/run-gemini-cli@main' (branch)
-
-.github/workflows/gemini-review.yml:
-  - uses: 'google-github-actions/run-gemini-cli@main' (branch)
-
-.github/workflows/gemini-scheduled-triage.yml:
-  - uses: 'google-github-actions/run-gemini-cli@main' (branch)
-
-.github/workflows/gemini-triage.yml:
-  - uses: 'google-github-actions/run-gemini-cli@main' (branch)
-
-.github/workflows/release.yml:
-  - uses: 'google-github-actions/.github/.github/workflows/release.yml@v3' (tag)
+Both should be pinned to a full 40-character commit SHA, e.g. `uses: google-github-actions/auth@<40-char-sha> # v3`.
 
 Locations:
 
-- `action.yml:196`
-- `action.yml:213`
-- `.github/workflows/draft-release.yml:14`
-- `.github/workflows/evals-nightly.yml:23`
-- `.github/workflows/evals-nightly.yml:41`
-- `.github/workflows/evals-nightly.yml:44`
-- `.github/workflows/evals-nightly.yml:68`
-- `.github/workflows/evals-nightly.yml:78`
-- `.github/workflows/evals-nightly.yml:84`
-- `.github/workflows/gemini-invoke.yml:28`
-- `.github/workflows/gemini-invoke.yml:33`
-- `.github/workflows/gemini-issue-fixer.yml:32`
-- `.github/workflows/gemini-plan-execute.yml:29`
-- `.github/workflows/gemini-plan-execute.yml:34`
-- `.github/workflows/gemini-review.yml:29`
-- `.github/workflows/gemini-scheduled-triage.yml:47`
-- `.github/workflows/gemini-triage.yml:47`
-- `.github/workflows/release.yml:9`
-
-### script-injection (severity: high)
-
-Sub-rule (a): The 'Run Evaluations' step in evals-nightly.yml directly interpolates GitHub Actions expressions into shell commands in the run: block. The expressions ${{ matrix.eval-file }} and ${{ matrix.model }} are embedded directly in shell command strings, bypassing any shell quoting protections. Before the shell executes the script, YAML template substitution replaces these expressions with their values — allowing an attacker who can influence the matrix values to inject arbitrary shell commands.
-
-Offending lines:
-  BASE_NAME=$(basename "${{ matrix.eval-file }}" .eval.ts)
-  REPORT_FILE="eval-results-${{ matrix.model }}-${BASE_NAME}.json"
-  npm run test:evals -- "${{ matrix.eval-file }}" --reporter=json --outputFile="$REPORT_FILE" || true
-
-Fix: Move the matrix values into env: variables and reference them as quoted shell variables (e.g., "$EVAL_FILE") in the run: block.
-
-Locations:
-
-- `.github/workflows/evals-nightly.yml:66`
-- `.github/workflows/evals-nightly.yml:67`
-- `.github/workflows/evals-nightly.yml:70`
+- `action.yml:232`
+- `action.yml:390`
 
 ## Iteration Notes
 
 ### Iteration 1
 
-**Fixes applied:** unpinned-uses, script-injection
+**Fixes applied:** unpinned-uses
 
 **Notes:**
 
-Fixed all unpinned action references by pinning to full 40-character SHA commit hashes: google-github-actions/auth@v3→7c6bc770..., actions/upload-artifact@v6→b7c566a7..., actions/upload-artifact@v4→ea165f8d..., actions/download-artifact@v4→d3f86a10..., actions/checkout@v4→11d5960a..., actions/setup-node@v4→49933ea5..., google-github-actions/run-gemini-cli@main→f5a57753..., google-github-actions/.github@v3→29c6d38e.... Fixed script injection in evals-nightly.yml 'Run Evaluations' step by moving matrix.eval-file and matrix.model expressions into env: block as EVAL_FILE and GEMINI_MODEL, then referencing them as plain shell variables in the run: block.
+Pinned both mutable tag references to full commit SHAs:
+1. `google-github-actions/auth@v3` → `google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3` (line 232)
+2. `actions/upload-artifact@v6` → `actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6` (line 390)
+
+Both were previously marked `# ratchet:exclude` but still used mutable tags. The `ratchet:exclude` comments have been replaced with the version tag comments for readability.
 
 ### Iteration 1
 
@@ -108,5 +48,5 @@ Fixed all unpinned action references by pinning to full 40-character SHA commit 
 
 **Notes:**
 
-Fixed the 'Sanitize workflow name' step in hardened/action/action.yml (around line 196). Added `safe=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` immediately before the write to $GITHUB_OUTPUT, and changed the write to use `$safe` instead of `$SANITIZED`. Also properly quoted `"$GITHUB_OUTPUT"` in the redirect. This ensures any newline or carriage-return characters embedded in the untrusted `inputs.workflow_name` value are stripped before being written to the output, preventing header injection attacks.
+Fixed the 'Sanitize workflow name' step in action.yml (line ~174) by adding the required newline-stripping sanitization pattern. After the existing sed/xargs/tr sanitization produces SANITIZED, a new line `SAFE=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` strips any remaining newline/carriage-return characters before writing `gh_workflow_name=$SAFE` to $GITHUB_OUTPUT. Also properly quoted `"$GITHUB_OUTPUT"` in the echo statement.
 
