@@ -195,9 +195,9 @@ runs:
       id: 'sanitize_workflow_name'
       shell: 'bash'
       run: |
-        SANITIZED=$(echo "${WORKFLOW_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
+        SANITIZED=$(printf '%s' "${WORKFLOW_NAME}" | tr -d '\n\r' | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
         safe=$(printf '%s' "$SANITIZED" | tr -d '\n\r')
-        echo "gh_workflow_name=${safe}" >> "$GITHUB_OUTPUT"
+        echo "gh_workflow_name=$safe" >> "$GITHUB_OUTPUT"
       env:
         WORKFLOW_NAME: '${{ inputs.workflow_name }}'
     - name: 'Configure Gemini CLI'
@@ -221,7 +221,7 @@ runs:
       if: |-
         ${{ inputs.gcp_workload_identity_provider != '' }}
       id: 'auth'
-      uses: 'google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed' # v2
+      uses: 'chainguard-actions/google-github-actions-auth@a101c638c5bdfc03aad67998ac1621e1bf860694' # v2
       with:
         project_id: '${{ inputs.gcp_project_id }}'
         workload_identity_provider: '${{ inputs.gcp_workload_identity_provider }}'
@@ -231,7 +231,7 @@ runs:
     - name: 'Install pnpm'
       if: |-
         ${{ inputs.use_pnpm == 'true' }}
-      uses: 'pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061' # ratchet:pnpm/action-setup@v4
+      uses: 'chainguard-actions/pnpm-action-setup@53f473c07d5f67c216ce416ee025f5cb773b27f3' # ratchet:pnpm/action-setup@v4
       with:
         version: 10
     - name: 'Install Gemini CLI'
@@ -420,7 +420,7 @@ runs:
     - name: 'Upload Gemini CLI outputs'
       if: |-
         ${{ inputs.upload_artifacts == 'true' }}
-      uses: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' # v4
+      uses: 'chainguard-actions/actions-upload-artifact@61ae9717c37cd5ac5fcaa5599c0dab961d043ecc' # v4
       with:
         name: 'gemini-output'
         path: 'gemini-artifacts/'

@@ -16,41 +16,31 @@ Action **google-github-actions--run-gemini-cli/v0.1.18** was hardened automatica
 
 ### unpinned-uses (severity: high)
 
-Multiple `uses:` references are pinned to mutable tags or branch names instead of immutable 40-character commit SHAs, making the action vulnerable to supply-chain attacks:
+Two `uses:` references in action.yml are pinned to mutable version tags rather than full 40-character commit SHAs, making the action vulnerable to supply-chain attacks if the upstream tag is moved:
+- `google-github-actions/auth@v2` (tag `v2`, marked `# ratchet:exclude`)
+- `actions/upload-artifact@v4` (tag `v4`, marked `# ratchet:exclude`)
 
-**action.yml:**
-- `google-github-actions/auth@v2` (ratchet:exclude)
-- `actions/upload-artifact@v4` (ratchet:exclude)
-
-**Workflow files:**
-- `google-github-actions/run-gemini-cli@main` (in gemini-invoke.yml, gemini-issue-fixer.yml, gemini-review.yml, gemini-scheduled-triage.yml, gemini-triage.yml)
-- `google-github-actions/.github/.github/workflows/draft-release.yml@v3` (in draft-release.yml)
-- `google-github-actions/.github/.github/workflows/release.yml@v3` (in release.yml)
+These should be pinned to full SHA digests (e.g. `google-github-actions/auth@<40-hex-sha>`).
 
 Locations:
 
-- `action.yml:205`
-- `action.yml:380`
-- `.github/workflows/gemini-invoke.yml:33`
-- `.github/workflows/gemini-issue-fixer.yml:38`
-- `.github/workflows/gemini-review.yml:35`
-- `.github/workflows/gemini-scheduled-triage.yml:75`
-- `.github/workflows/gemini-triage.yml:55`
-- `.github/workflows/draft-release.yml:14`
-- `.github/workflows/release.yml:8`
+- `action.yml:200`
+- `action.yml:370`
 
 ### github-env-injection (severity: high)
 
-Two steps write untrusted/user-controlled values to `$GITHUB_OUTPUT` without the required `printf '%s' ... | tr -d '\n\r'` sanitization:
+The 'Sanitize workflow name' step writes a value derived from `inputs.workflow_name` (via the `WORKFLOW_NAME` env var) to `$GITHUB_OUTPUT` without the required `printf '%s' "$VAR" | tr -d '\n\r'` sanitization. The pipeline used (`sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]'`) strips many special characters but does not apply the mandatory newline-stripping sanitization step before the write:
 
-1. **action.yml `sanitize_workflow_name` step**: The env var `WORKFLOW_NAME` is set from `inputs.workflow_name` (caller-controlled). The value is processed through `sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]'` and written as `echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT`. The required `printf '%s' ... | tr -d '\n\r'` sanitization pattern is not applied immediately before the write.
+```bash
+SANITIZED=$(echo "${WORKFLOW_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
+echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT
+```
 
-2. **gemini-scheduled-triage.yml `find_issues` step**: The variable `ISSUES` is populated from `gh issue list --json number,title,body`, which includes user-controlled issue titles and bodies that can contain arbitrary newlines and special characters. It is written directly to `$GITHUB_OUTPUT` as `echo "issues_to_triage=${ISSUES}" >> "${GITHUB_OUTPUT}"` with no sanitization whatsoever, allowing newline injection to poison subsequent output parsing.
+A calling workflow can supply a crafted `workflow_name` input (whose default is `${{ github.workflow }}`) that injects additional key=value pairs into `$GITHUB_OUTPUT`.
 
 Locations:
 
-- `action.yml:185`
-- `.github/workflows/gemini-scheduled-triage.yml:82`
+- `action.yml:183`
 
 ## Iteration Notes
 
@@ -60,5 +50,8 @@ Locations:
 
 **Notes:**
 
-Fixed all unpinned `uses:` references by resolving them to full 40-character commit SHAs using lookup_action_sha: (1) google-github-actions/auth@v2 → @c200f3691d83b41bf9bbd8638997a462592937ed in action.yml; (2) actions/upload-artifact@v4 → @ea165f8d65b6e75b540449e92b4886f43607fa02 in action.yml; (3) google-github-actions/run-gemini-cli@main → @f5a57753971eb5f2734c70df7e796f2fcfbef6e7 in all 5 workflow files; (4) google-github-actions/.github workflows @v3 → @29c6d38eeb974133b4b66401985f7c70cf4a6681 in draft-release.yml and release.yml. Fixed github-env-injection in two locations: (1) action.yml sanitize_workflow_name step now uses `safe=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` before writing to GITHUB_OUTPUT; (2) gemini-scheduled-triage.yml find_issues step now uses `safe_issues=$(printf '%s' "${ISSUES}" | tr -d '\n\r')` before writing to GITHUB_OUTPUT.
+Fixed three issues in hardened/action/action.yml:
+1. Pinned `google-github-actions/auth@v2` to full SHA `c200f3691d83b41bf9bbd8638997a462592937ed # v2`
+2. Pinned `actions/upload-artifact@v4` to full SHA `ea165f8d65b6e75b540449e92b4886f43607fa02 # v4`
+3. Fixed github-env-injection in 'Sanitize workflow name' step: replaced `echo "${WORKFLOW_NAME}"` with `printf '%s' "${WORKFLOW_NAME}" | tr -d '\n\r'` to strip newlines before processing, and added a second `printf '%s' "$SANITIZED" | tr -d '\n\r'` sanitization step before writing to `$GITHUB_OUTPUT`. Also quoted `$GITHUB_OUTPUT` for correctness.
 
