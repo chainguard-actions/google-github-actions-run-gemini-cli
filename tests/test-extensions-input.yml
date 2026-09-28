@@ -1,4 +1,4 @@
-name: Test GCP inputs coverage
+name: Test extensions input coverage
 on:
   workflow_dispatch:
 jobs:
@@ -7,19 +7,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Run action with GCP inputs
+      - name: Run action with extensions input
         id: action
         uses: .
         continue-on-error: true
         with:
-          gcp_location: 'us-central1'
-          gcp_project_id: 'my-test-project'
-          gcp_service_account: 'test-sa@my-test-project.iam.gserviceaccount.com'
-          gcp_workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider'
-          use_vertex_ai: 'true'
+          gemini_api_key: 'fake-key-for-input-coverage'
+          extensions: '["@google/gemini-cli-extension-example"]'
           prompt: 'Hello'
 
-      - name: Assert action ran (GCP auth will fail on sentinel repo, which is expected)
+      - name: Assert action ran (will fail without real API key, which is expected)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
@@ -27,7 +24,7 @@ jobs:
           if [ "$OUTCOME" = "success" ]; then
             echo "PASS: action succeeded"
           elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed gracefully (expected - no real GCP credentials)"
+            echo "PASS: action failed gracefully (expected - no real Gemini API key)"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
