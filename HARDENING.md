@@ -10,58 +10,41 @@
 
 **Harden Agent Version:** `2`
 
-Action **google-github-actions--run-gemini-cli/v0.1.21** was hardened automatically. 3 finding(s) were identified and resolved across 1 iteration(s).
+Action **google-github-actions--run-gemini-cli/v0.1.21** was hardened automatically. 2 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### unpinned-uses (severity: high)
 
-Two `uses:` references in action.yml are pinned to mutable tags rather than full 40-character SHA digests, making the action vulnerable to supply-chain attacks if those tags are moved:
-- `google-github-actions/auth@v3` (tag `v3`, marked `# ratchet:exclude`)
-- `actions/upload-artifact@v6` (tag `v6`, marked `# ratchet:exclude`)
+Two `uses:` references in action.yml use mutable tag refs instead of full 40-character SHA digests, making the action vulnerable to supply-chain attacks if those tags are moved:
+- `google-github-actions/auth@v3` (tag ref, not a SHA)
+- `actions/upload-artifact@v6` (tag ref, not a SHA)
 
-The third reference `pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061` is correctly SHA-pinned.
+Both are marked `# ratchet:exclude` but remain unpinned. The third reference (`pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061`) is correctly SHA-pinned.
 
 Locations:
 
-- `action.yml:218`
-- `action.yml:430`
+- `action.yml:200`
+- `action.yml:340`
 
 ### github-env-injection (severity: high)
 
-The 'Sanitize workflow name' step writes `$SANITIZED` to `$GITHUB_OUTPUT` without the required sanitization (`printf '%s' ... | tr -d '\n\r'`). `SANITIZED` is derived from the `WORKFLOW_NAME` env var, which holds `${{ inputs.workflow_name }}` (defaulting to `${{ github.workflow }}`). While the `sed | xargs | tr` pipeline does strip some whitespace, it does not apply the required `tr -d '\n\r'` sanitization immediately before the write. An attacker-controlled `workflow_name` input containing embedded newlines could inject arbitrary key=value pairs into `$GITHUB_OUTPUT`.
-
-Offending line: `echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT`
+The 'Sanitize workflow name' step writes a value derived from `inputs.workflow_name` (an untrusted caller-controlled input) to `$GITHUB_OUTPUT` without the required sanitization pipeline (`printf '%s' "$VAR" | tr -d '\n\r'`). The value flows through env var `WORKFLOW_NAME: '${{ inputs.workflow_name }}'` → `SANITIZED=$(echo "${WORKFLOW_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')` → `echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT`. While the `sed`+`xargs` pipeline strips most special characters, it does not apply the required `printf '%s' | tr -d '\n\r'` sanitization immediately before the write to `$GITHUB_OUTPUT`, leaving a potential newline-injection path into the output file.
 
 Locations:
 
-- `action.yml:197`
-
-### script-injection (severity: high)
-
-Rule (b) violation: The 'Upload Telemetry to Google Cloud' step expands env vars holding workflow-controllable values inside double-quoted shell strings passed to `sed`, allowing bash command substitution (`$(...)`) to execute:
-
-```
-sed -e "s#OTLP_GOOGLE_CLOUD_PROJECT#${OTLP_GOOGLE_CLOUD_PROJECT}#g" \\
-    -e "s#GITHUB_REPOSITORY_PLACEHOLDER#${GITHUB_REPOSITORY}#g" \\
-    -e "s#GITHUB_RUN_ID_PLACEHOLDER#${GITHUB_RUN_ID}#g" \\
-```
-
-`${OTLP_GOOGLE_CLOUD_PROJECT}` is set from `inputs.gcp_project_id` (attacker-controlled). `${GITHUB_REPOSITORY}` and `${GITHUB_RUN_ID}` are set from `github.repository` and `github.run_id` (GitHub-controlled but still flow through YAML template substitution). A value like `$(malicious_command)` in any of these variables would be executed by bash inside the double-quoted string. The variables must be passed as separate quoted arguments or the values must be sanitized before use in shell string interpolation.
-
-Locations:
-
-- `action.yml:450`
+- `action.yml:174`
 
 ## Iteration Notes
 
 ### Iteration 1
 
-**Fixes applied:** unpinned-uses, github-env-injection, script-injection
+**Fixes applied:** unpinned-uses, github-env-injection
 
 **Notes:**
 
-1. Pinned `google-github-actions/auth@v3` to SHA `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093` and `actions/upload-artifact@v6` to SHA `b7c566a772e6b6bfb58ed0dc250532a479d7789f`.
-2. Fixed github-env-injection in 'Sanitize workflow name' step by adding `SANITIZED=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` before writing to `$GITHUB_OUTPUT`, and also quoted `$GITHUB_OUTPUT`.
-3. Fixed script-injection in 'Upload Telemetry to Google Cloud' step by replacing double-quoted `sed -e "s#...#${VAR}#g"` expressions (which allow bash command substitution) with `awk -v proj=... -v repo=... -v runid=...` variable assignments, which pass values as literal strings without shell expansion.
+Three changes made to hardened/action/action.yml:
+1. Pinned `google-github-actions/auth@v3` → `@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3`
+2. Pinned `actions/upload-artifact@v6` → `@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6`
+3. Fixed github-env-injection in the 'Sanitize workflow name' step: added `SANITIZED=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` immediately before the `echo "gh_workflow_name=$SANITIZED" >> "$GITHUB_OUTPUT"` write, and also quoted `$GITHUB_OUTPUT` for correctness.
 

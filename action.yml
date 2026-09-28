@@ -443,15 +443,9 @@ runs:
         fi
 
         # Generate the real config file from the template
-        awk -v proj="${OTLP_GOOGLE_CLOUD_PROJECT}" \
-            -v repo="${GITHUB_REPOSITORY}" \
-            -v runid="${GITHUB_RUN_ID}" \
-          '{
-            gsub(/OTLP_GOOGLE_CLOUD_PROJECT/, proj);
-            gsub(/GITHUB_REPOSITORY_PLACEHOLDER/, repo);
-            gsub(/GITHUB_RUN_ID_PLACEHOLDER/, runid);
-            print
-          }' \
+        sed -e "s#OTLP_GOOGLE_CLOUD_PROJECT#${OTLP_GOOGLE_CLOUD_PROJECT}#g" \
+            -e "s#GITHUB_REPOSITORY_PLACEHOLDER#${GITHUB_REPOSITORY}#g" \
+            -e "s#GITHUB_RUN_ID_PLACEHOLDER#${GITHUB_RUN_ID}#g" \
           "${GITHUB_ACTION_PATH}/scripts/collector-gcp.yaml.template" > ".gemini/collector-gcp.yaml"
 
         # Ensure credentials file has the right permissions
