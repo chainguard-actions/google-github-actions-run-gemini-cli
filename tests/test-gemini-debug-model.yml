@@ -1,4 +1,4 @@
-name: Test GCP inputs (location, project_id, service_account)
+name: Test gemini_debug and gemini_model inputs
 on:
   workflow_dispatch:
 jobs:
@@ -12,9 +12,8 @@ jobs:
         continue-on-error: true
         with:
           gemini_api_key: 'fake-gemini-api-key-for-input-coverage'
-          gcp_location: 'us-central1'
-          gcp_project_id: 'my-test-project'
-          gcp_service_account: 'test-sa@my-test-project.iam.gserviceaccount.com'
+          gemini_debug: 'true'
+          gemini_model: 'gemini-2.0-flash'
           prompt: 'Say hello'
 
       - name: Assert action ran (inputs accepted, may fail on fake key)
@@ -23,7 +22,7 @@ jobs:
         run: |
           echo "outcome: $OUTCOME"
           if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action ran with gcp_location, gcp_project_id, gcp_service_account inputs"
+            echo "PASS: action ran with gemini_debug and gemini_model inputs"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
