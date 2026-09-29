@@ -16,24 +16,23 @@ Action **google-github-actions--run-gemini-cli/v0.1.18** was hardened automatica
 
 ### unpinned-uses (severity: high)
 
-Two `uses:` references in action.yml are pinned to mutable version tags instead of immutable 40-character SHA digests, making them vulnerable to supply-chain attacks if the upstream tag is moved:
-- `google-github-actions/auth@v2` (line ~185) — tagged ref, not SHA-pinned
-- `actions/upload-artifact@v4` (line ~340) — tagged ref, not SHA-pinned
-
-Note: `pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061` is correctly SHA-pinned.
+Two `uses:` references in action.yml are pinned to mutable version tags rather than immutable 40-character commit SHAs, making the action vulnerable to supply-chain attacks if those tags are moved:
+- `uses: 'google-github-actions/auth@v2'` — mutable tag `v2` (marked `# ratchet:exclude` but still unpinned)
+- `uses: 'actions/upload-artifact@v4'` — mutable tag `v4` (marked `# ratchet:exclude` but still unpinned)
+The third reference `pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061` is correctly pinned to a SHA.
 
 Locations:
 
-- `action.yml:185`
-- `action.yml:340`
+- `action.yml:200`
+- `action.yml:355`
 
 ### github-env-injection (severity: high)
 
-The 'Sanitize workflow name' step writes a value derived from `inputs.workflow_name` (an untrusted input) to `$GITHUB_OUTPUT` without the required `printf '%s' ... | tr -d '\n\r'` sanitization pattern. The value flows through `WORKFLOW_NAME` env var → `SANITIZED` shell variable → `echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT`. While the `sed 's/[^ a-zA-Z0-9-]//g'` pipeline strips most special characters, the required sanitization step (`printf '%s' "$VAR" | tr -d '\n\r'`) is not applied immediately before the write to `$GITHUB_OUTPUT`.
+The 'Sanitize workflow name' step writes a value derived from `inputs.workflow_name` (an attacker-controllable input) to `$GITHUB_OUTPUT` without the required sanitization step (`printf '%s' ... | tr -d '\n\r'`) immediately before the write. The env var `WORKFLOW_NAME` is set from `${{ inputs.workflow_name }}` and then processed through `sed/xargs/tr` into `$SANITIZED`, but the final write `echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT` does not apply the mandatory newline-stripping sanitization pipeline before writing to the special environment file. A crafted input containing embedded newlines could inject additional key=value pairs into GITHUB_OUTPUT.
 
 Locations:
 
-- `action.yml:175`
+- `action.yml:176`
 
 ## Iteration Notes
 
@@ -43,8 +42,8 @@ Locations:
 
 **Notes:**
 
-Three fixes applied to hardened/action/action.yml:
-1. Pinned `google-github-actions/auth@v2` to `google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2`
-2. Pinned `actions/upload-artifact@v4` to `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4`
-3. Fixed github-env-injection in 'Sanitize workflow name' step: added `SANITIZED=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` immediately before writing to `$GITHUB_OUTPUT`, and quoted `$GITHUB_OUTPUT` in the echo command.
+Fixed three issues in hardened/action/action.yml:
+1. Pinned `google-github-actions/auth@v2` to immutable SHA `c200f3691d83b41bf9bbd8638997a462592937ed` (# v2)
+2. Pinned `actions/upload-artifact@v4` to immutable SHA `ea165f8d65b6e75b540449e92b4886f43607fa02` (# v4)
+3. Fixed github-env-injection in 'Sanitize workflow name' step: added `safe=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` before writing to GITHUB_OUTPUT, and updated the write to use `$safe` with a quoted `"$GITHUB_OUTPUT"` reference.
 
