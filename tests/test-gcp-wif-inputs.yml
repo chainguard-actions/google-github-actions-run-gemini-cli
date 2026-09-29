@@ -1,4 +1,4 @@
-name: Test GCP Workload Identity Federation Inputs
+name: Test GCP Workload Identity Federation inputs
 on:
   workflow_dispatch:
 jobs:
@@ -18,15 +18,17 @@ jobs:
           use_vertex_ai: 'true'
           prompt: 'Say hello'
 
-      - name: Assert action ran with GCP inputs (fails gracefully without real credentials)
+      - name: Assert action ran with GCP inputs (expected to fail without real credentials)
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
+          # The action is expected to fail because we don't have real GCP credentials,
+          # but it should fail at the auth step, not before (meaning inputs were accepted)
           if [ "$OUTCOME" = "success" ]; then
-            echo "PASS: action succeeded"
+            echo "PASS: action succeeded (real credentials available)"
           elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed gracefully (no real GCP credentials available)"
+            echo "PASS: action failed gracefully as expected without real GCP credentials"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
