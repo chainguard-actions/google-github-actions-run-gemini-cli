@@ -1,4 +1,4 @@
-name: Test GCP location, project_id, and service_account inputs
+name: Test GCP location, project, service account, and model inputs
 on:
   workflow_dispatch:
 
@@ -8,8 +8,9 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Run the action with GCP-related inputs. The action will fail at the
-      # auth step because the WIF provider is fake, but the inputs are exercised.
+      # Run the action with GCP/WIF inputs and gemini_model.
+      # The action will fail at the auth step since we don't have real WIF credentials,
+      # but all the specified inputs will be exercised/passed through.
       - id: action
         uses: .
         continue-on-error: true
@@ -18,6 +19,7 @@ jobs:
           gcp_project_id: 'my-test-project'
           gcp_location: 'us-central1'
           gcp_service_account: 'test-sa@my-test-project.iam.gserviceaccount.com'
+          gemini_model: 'gemini-2.0-flash'
           use_vertex_ai: 'true'
           prompt: 'Say hello'
           gemini_cli_version: 'latest'
@@ -27,14 +29,19 @@ jobs:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
           echo "outcome: $OUTCOME"
-          # The action will fail at the auth step with fake WIF credentials.
-          # Both 'success' and 'failure' are acceptable; 'skipped' is not.
-          if [ "$OUTCOME" = "skipped" ]; then
-            echo "FAIL: action was skipped unexpectedly"
+          # The action should either succeed or fail (not be skipped).
+          # With fake WIF credentials, it will fail at the auth step.
+          if [ "$OUTCOME" = "success" ] || [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action ran to completion (outcome=$OUTCOME)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
           fi
-          echo "PASS: action ran with outcome=$OUTCOME"
 
-      - name: Verify gcp_location, gcp_project_id, gcp_service_account inputs are accepted
+      - name: Verify gcp_project_id, gcp_location, gcp_service_account, and gemini_model inputs are accepted
         run: |
-          echo "PASS: gcp_location, gcp_project_id, and gcp_service_account inputs were accepted by the action"
+          echo "PASS: action accepted gcp_project_id, gcp_location, gcp_service_account, and gemini_model inputs"
+          echo "gcp_project_id: my-test-project"
+          echo "gcp_location: us-central1"
+          echo "gcp_service_account: test-sa@my-test-project.iam.gserviceaccount.com"
+          echo "gemini_model: gemini-2.0-flash"

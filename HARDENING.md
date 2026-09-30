@@ -10,40 +10,39 @@
 
 **Harden Agent Version:** `2`
 
-Action **google-github-actions--run-gemini-cli/v0.1.19** was hardened automatically. 1 finding(s) were identified and resolved across 2 iteration(s).
+Action **google-github-actions--run-gemini-cli/v0.1.19** was hardened automatically. 2 finding(s) were identified and resolved across 1 iteration(s).
 
 ## Findings Fixed
 
 ### unpinned-uses (severity: high)
 
-Two `uses:` references in action.yml are pinned to mutable version tags instead of full 40-character SHA commit hashes, making the action vulnerable to supply-chain attacks if those tags are moved:
-1. `uses: 'google-github-actions/auth@v3'` — tag `v3` is mutable (marked `# ratchet:exclude` but still unsafe)
-2. `uses: 'actions/upload-artifact@v6'` — tag `v6` is mutable (marked `# ratchet:exclude` but still unsafe)
-These should be pinned to their full SHA digests, e.g. `uses: 'google-github-actions/auth@<40-char-sha> # v3'`.
+Two `uses:` references in action.yml use mutable version tags instead of full 40-character SHA commit hashes, making them vulnerable to supply-chain attacks. Both are marked `# ratchet:exclude` but that does not make them safe:
+- `google-github-actions/auth@v3` — mutable tag
+- `actions/upload-artifact@v6` — mutable tag
 
 Locations:
 
 - `action.yml:196`
-- `action.yml:362`
+- `action.yml:311`
+
+### github-env-injection (severity: high)
+
+The 'Sanitize workflow name' step sets the `WORKFLOW_NAME` env var from `inputs.workflow_name` (attacker-controllable), processes it through `sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]'`, and writes the result to `$GITHUB_OUTPUT` without the required `printf '%s' ... | tr -d '\n\r'` sanitization. The `sed` command strips most special characters but does NOT strip embedded newlines (sed processes line-by-line). A newline injected via `inputs.workflow_name` could inject additional key=value pairs into `$GITHUB_OUTPUT`, potentially overwriting subsequent step outputs. The offending line is: `echo "gh_workflow_name=$SANITIZED" >> $GITHUB_OUTPUT`
+
+Locations:
+
+- `action.yml:170`
 
 ## Iteration Notes
 
 ### Iteration 1
 
-**Fixes applied:** unpinned-uses
+**Fixes applied:** unpinned-uses, github-env-injection
 
 **Notes:**
 
-Pinned both mutable tag references to full 40-character SHA commit hashes:
-1. `google-github-actions/auth@v3` → `google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3` (line 196)
-2. `actions/upload-artifact@v6` → `actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6` (line 362)
-SHAs were resolved via lookup_action_sha. The `# ratchet:exclude` comments were replaced with version tag comments for readability.
-
-### Iteration 2
-
-**Fixes applied:** github-env-injection
-
-**Notes:**
-
-Fixed the 'Sanitize workflow name' step in action.yml (around line 190). Added `safe=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` to strip newline and carriage return characters from the sanitized workflow name before writing to $GITHUB_OUTPUT. Changed the echo statement to use `$safe` instead of `$SANITIZED`, and also properly quoted `"$GITHUB_OUTPUT"`. This prevents an attacker-controlled workflow name containing newline characters from injecting additional key=value pairs into $GITHUB_OUTPUT.
+Fixed three issues in hardened/action/action.yml:
+1. Pinned `google-github-actions/auth@v3` to full SHA `7c6bc770dae815cd3e89ee6cdf493a5fab2cc093` (# v3).
+2. Pinned `actions/upload-artifact@v6` to full SHA `b7c566a772e6b6bfb58ed0dc250532a479d7789f` (# v6).
+3. Fixed github-env-injection in 'Sanitize workflow name' step: added `SAFE=$(printf '%s' "$SANITIZED" | tr -d '\n\r')` and write `$SAFE` (not `$SANITIZED`) to `$GITHUB_OUTPUT`, preventing newline injection that could overwrite subsequent step outputs.
 
