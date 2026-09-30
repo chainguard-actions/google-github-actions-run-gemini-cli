@@ -1,4 +1,4 @@
-name: Test GCP WIF inputs coverage
+name: Test gemini_debug and gemini_model inputs coverage
 on:
   workflow_dispatch:
 jobs:
@@ -6,17 +6,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
       - id: action
         uses: .
         continue-on-error: true
         with:
-          gcp_workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/test-pool/providers/test-provider'
-          gcp_project_id: 'my-test-project'
-          gcp_service_account: 'test-sa@my-test-project.iam.gserviceaccount.com'
-          gcp_location: 'us-central1'
-          use_vertex_ai: 'true'
+          gemini_api_key: 'fake-api-key-for-input-coverage'
+          gemini_debug: 'true'
+          gemini_model: 'gemini-2.0-flash'
           prompt: 'Say hello'
-      - name: Assert action ran (validation passed, auth failed gracefully on fake WIF)
+
+      - name: Assert action ran with debug and model inputs
         env:
           OUTCOME: ${{ steps.action.outcome }}
         run: |
@@ -24,7 +24,7 @@ jobs:
           if [ "$OUTCOME" = "success" ]; then
             echo "PASS: action succeeded"
           elif [ "$OUTCOME" = "failure" ]; then
-            echo "PASS: action failed gracefully (fake WIF credentials not resolvable)"
+            echo "PASS: action failed gracefully (expected - fake API key cannot authenticate)"
           else
             echo "FAIL: unexpected outcome '$OUTCOME'"
             exit 1
