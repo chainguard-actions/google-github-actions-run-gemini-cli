@@ -16,6 +16,7 @@ name: 'Run Gemini CLI'
 author: 'Google LLC'
 description: |-
   Invoke the Gemini CLI from a GitHub Action.
+
 inputs:
   gcp_location:
     description: 'The Google Cloud location.'
@@ -90,6 +91,7 @@ inputs:
     description: 'The GitHub workflow name, used for telemetry purposes.'
     required: false
     default: '${{ github.workflow }}'
+
 outputs:
   summary:
     description: 'The summarized output from the Gemini CLI execution.'
@@ -97,6 +99,7 @@ outputs:
   error:
     description: 'The error output from the Gemini CLI execution, if any.'
     value: '${{ steps.gemini_run.outputs.gemini_errors }}'
+
 runs:
   using: 'composite'
   steps:
@@ -191,15 +194,17 @@ runs:
         INPUT_GCP_TOKEN_FORMAT: '${{ inputs.gcp_token_format }}'
         INPUT_USE_VERTEX_AI: '${{ inputs.use_vertex_ai }}'
         INPUT_USE_GEMINI_CODE_ASSIST: '${{ inputs.use_gemini_code_assist }}'
+
     - name: 'Sanitize workflow name'
       id: 'sanitize_workflow_name'
       shell: 'bash'
       run: |
-        SAFE_WORKFLOW_NAME=$(printf '%s' "${WORKFLOW_NAME}" | tr -d '\n\r')
-        SANITIZED=$(echo "${SAFE_WORKFLOW_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
-        echo "gh_workflow_name=$SANITIZED" >> "$GITHUB_OUTPUT"
+        SANITIZED=$(echo "${WORKFLOW_NAME}" | sed 's/[^ a-zA-Z0-9-]//g' | xargs | tr ' ' '_' | tr '[:upper:]' '[:lower:]')
+        SAFE=$(printf '%s' "$SANITIZED" | tr -d '\n\r')
+        echo "gh_workflow_name=$SAFE" >> "$GITHUB_OUTPUT"
       env:
         WORKFLOW_NAME: '${{ inputs.workflow_name }}'
+
     - name: 'Configure Gemini CLI'
       if: |-
         ${{ inputs.settings != '' }}
@@ -209,6 +214,7 @@ runs:
       shell: 'bash'
       env:
         SETTINGS: '${{ inputs.settings }}'
+
     - name: 'Install Custom Commands'
       shell: 'bash'
       run: |-
@@ -217,6 +223,7 @@ runs:
         cp -r "${GITHUB_ACTION_PATH}/.github/commands/"* .gemini/commands/
       env:
         GITHUB_ACTION_PATH: '${{ github.action_path }}'
+
     - name: 'Authenticate to Google Cloud'
       if: |-
         ${{ inputs.gcp_workload_identity_provider != '' }}
@@ -228,12 +235,14 @@ runs:
         service_account: '${{ inputs.gcp_service_account }}'
         token_format: '${{ inputs.gcp_token_format }}'
         access_token_scopes: '${{ inputs.gcp_access_token_scopes }}'
+
     - name: 'Install pnpm'
       if: |-
         ${{ inputs.use_pnpm == 'true' }}
       uses: 'chainguard-actions/pnpm-action-setup@53f473c07d5f67c216ce416ee025f5cb773b27f3' # ratchet:pnpm/action-setup@v4
       with:
         version: 10
+
     - name: 'Install Gemini CLI'
       id: 'install'
       env:
@@ -279,6 +288,7 @@ runs:
             fi
           done
         fi
+
     - name: 'Run Gemini CLI'
       id: 'gemini_run'
       shell: 'bash'
@@ -346,22 +356,24 @@ runs:
 
 
         # Set the captured response as a step output, supporting multiline
-        echo "gemini_response<<EOF" >> "${GITHUB_OUTPUT}"
+        RESPONSE_EOF="EOF_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+        echo "gemini_response<<${RESPONSE_EOF}" >> "${GITHUB_OUTPUT}"
         if [[ -n "${RESPONSE}" ]]; then
           echo "${RESPONSE}" >> "${GITHUB_OUTPUT}"
         else
           cat "${TEMP_STDOUT}" >> "${GITHUB_OUTPUT}"
         fi
-        echo "EOF" >> "${GITHUB_OUTPUT}"
+        echo "${RESPONSE_EOF}" >> "${GITHUB_OUTPUT}"
 
         # Set the captured errors as a step output, supporting multiline
-        echo "gemini_errors<<EOF" >> "${GITHUB_OUTPUT}"
+        ERRORS_EOF="EOF_$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+        echo "gemini_errors<<${ERRORS_EOF}" >> "${GITHUB_OUTPUT}"
         if [[ -n "${ERROR_JSON}" ]]; then
           echo "${ERROR_JSON}" >> "${GITHUB_OUTPUT}"
         else
           cat "${TEMP_STDERR}" >> "${GITHUB_OUTPUT}"
         fi
-        echo "EOF" >> "${GITHUB_OUTPUT}"
+        echo "${ERRORS_EOF}" >> "${GITHUB_OUTPUT}"
 
         # Generate Job Summary
         if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
@@ -422,6 +434,7 @@ runs:
         PROMPT: '${{ inputs.prompt }}'
         GEMINI_MODEL: '${{ inputs.gemini_model }}'
         GH_WORKFLOW_NAME: '${{ steps.sanitize_workflow_name.outputs.gh_workflow_name }}'
+
     - name: 'Upload Gemini CLI outputs'
       if: |-
         ${{ inputs.upload_artifacts == 'true' }}
@@ -429,6 +442,7 @@ runs:
       with:
         name: 'gemini-output'
         path: 'gemini-artifacts/'
+
     - name: 'Upload Telemetry to Google Cloud'
       if: |-
         ${{ inputs.gcp_workload_identity_provider != '' }}
@@ -496,6 +510,7 @@ runs:
         GITHUB_ACTION_PATH: '${{ github.action_path }}'
         GITHUB_REPOSITORY: '${{ github.repository }}'
         GITHUB_RUN_ID: '${{ github.run_id }}'
+
 branding:
   icon: 'terminal'
   color: 'blue'
